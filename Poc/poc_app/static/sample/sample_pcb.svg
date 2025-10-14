@@ -1,0 +1,52 @@
+<svg width="500" height="300" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .svg-highlight { stroke: red !important; stroke-width: 1px !important; }
+    .pad { fill: #d4af37; } /* Gold color for pads */
+    .silk { stroke: white; fill: none; stroke-width: 0.2; }
+    .ref { fill: white; font-size: 5px; font-family: monospace; }
+  </style>
+  <rect width="100%" height="100%" fill="#2E8B57"/> <!-- Dark green PCB color -->
+
+  <!-- U1 Footprint -->
+  <g transform="translate(200, 100)">
+    <rect x="0" y="0" width="50" height="50" fill="none" class="silk"/>
+    <text x="25" y="25" text-anchor="middle" class="ref">U1</text>
+    <!-- some pads -->
+    <rect x="-2" y="-2" width="4" height="4" class="pad"/>
+    <rect x="48" y="-2" width="4" height="4" class="pad"/>
+    <rect x="-2" y="48" width="4" height="4" class="pad"/>
+    <rect x="48" y="48" width="4" height="4" class="pad"/>
+  </g>
+
+  <!-- C1 Footprint (0603) -->
+  <g transform="translate(100, 50)">
+    <rect x="0" y="0" width="8" height="5" fill="none" class="silk"/>
+    <rect x="-1" y="1" width="2" height="3" class="pad"/>
+    <rect x="7" y="1" width="2" height="3" class="pad"/>
+    <text x="4" y="12" text-anchor="middle" class="ref">C1</text>
+  </g>
+  
+  <!-- C2 Footprint (0805) -->
+  <g transform="translate(100, 150)">
+    <rect x="0" y="0" width="10" height="7" fill="none" class="silk"/>
+    <rect x="-1" y="2" width="2" height="3" class="pad"/>
+    <rect x="9" y="2" width="2" height="3" class="pad"/>
+    <text x="5" y="15" text-anchor="middle" class="ref">C2</text>
+  </g>
+
+  <!-- R1 Footprint (0603) -->
+  <g transform="translate(350, 50)">
+    <rect x="0" y="0" width="8" height="5" fill="none" class="silk"/>
+    <rect x="-1" y="1" width="2" height="3" class="pad"/>
+    <rect x="7" y="1" width="2" height="3" class="pad"/>
+    <text x="4" y="12" text-anchor="middle" class="ref">R1</text>
+  </g>
+  
+  <!-- R2 Footprint (0603) -->
+  <g transform="translate(350, 150)">
+    <rect x="0" y="0" width="8" height="5" fill="none" class="silk"/>
+    <rect x="-1" y="1" width="2" height="3" class="pad"/>
+    <rect x="7" y="1" width="2" height="3" class="pad"/>
+    <text x="4" y="12" text-anchor="middle" class="ref">R2</text>
+  </g>
+</svg>

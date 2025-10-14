@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>部品一覧</h2>
+  <a href="{{ url_for('parts.part_create') }}" class="btn btn-success mb-3">＋新規登録</a>
+  <a href="{{ url_for('parts.upload_csv') }}" class="btn btn-primary mb-3">CSV一括登録</a>
+
+  <form method="GET" class="mb-4">
+    <div class="input-group mb-3">
+      <input type="text" class="form-control" placeholder="部品名、カテゴリ、保管場所で検索..." name="q" value="{{ request.args.get('q', '') }}">
+      <button class="btn btn-outline-secondary" type="submit">検索</button>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">タグで絞り込み:</label>
+      <div>
+        {% for tag in all_tags %}
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" id="filter_tag_{{ tag.id }}" name="tags" value="{{ tag.id }}"
+                   {% if tag.id|string in selected_tag_ids %}checked{% endif %}>
+            <label class="form-check-label" for="filter_tag_{{ tag.id }}">{{ tag.name }}</label>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">フィルタリング</button>
+    <a href="{{ url_for('parts.parts_list') }}" class="btn btn-secondary">クリア</a>
+  </form>
+
+  {% if parts %}
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>部品名</th>
+          <th>カテゴリ</th>
+          <th>パッケージ</th>
+          <th>在庫数</th>
+          <th>保管場所</th>
+          <th>タグ</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for part in parts %}
+        <tr>
+          <td>{{ part.id }}</td>
+          <td>{{ part.name }}</td>
+          <td>{{ part.category }}</td>
+          <td>{{ part.package }}</td>
+          <td>{{ part.quantity }}</td>
+          <td>{{ part.location }}</td>
+          <td>
+            {% for tag in part.tags %}
+              <span class="badge bg-secondary">{{ tag.name }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            <a href="{{ url_for('parts.part_detail', part_id=part.id) }}" class="btn btn-sm btn-info">詳細</a>
+            <a href="{{ url_for('parts.part_edit', part_id=part.id) }}" class="btn btn-sm btn-warning">編集</a>
+            <form action="{{ url_for('parts.part_delete', part_id=part.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('本当にこの部品を削除しますか？');">
+              <button type="submit" class="btn btn-sm btn-danger">削除</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>まだ部品が登録されていません。</p>
+  {% endif %}
+</div>
+{% endblock %}

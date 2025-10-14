@@ -1,0 +1,44 @@
+<svg width="500" height="200" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .svg-highlight { fill: red !important; stroke: red; stroke-width: 0.5px; }
+    text { font-family: monospace; font-size: 10px; }
+    path { fill: none; stroke: black; stroke-width: 0.5; }
+  </style>
+
+  <!-- Component U1 -->
+  <g transform="translate(200, 50)">
+    <rect x="0" y="0" width="100" height="100" fill="lightgrey" stroke="black" stroke-width="0.5"/>
+    <text x="50" y="45" text-anchor="middle">U1</text>
+    <text x="50" y="65" text-anchor="middle">STM32F405</text>
+  </g>
+
+  <!-- Component C1 -->
+  <g transform="translate(50, 50)">
+    <path d="M 0 10 L 20 10 M 20 0 L 20 20 M 25 0 L 25 20 M 25 10 L 45 10"/>
+    <text x="22.5" y="35" text-anchor="middle">C1</text>
+    <text x="22.5" y="48" text-anchor="middle">100nF</text>
+  </g>
+  
+  <!-- Component C2 -->
+  <g transform="translate(50, 120)">
+    <path d="M 0 10 L 20 10 M 20 0 L 20 20 M 25 0 L 25 20 M 25 10 L 45 10"/>
+    <text x="22.5" y="35" text-anchor="middle">C2</text>
+    <text x="22.5" y="48" text-anchor="middle">1uF</text>
+  </g>
+
+  <!-- Component R1 -->
+  <g transform="translate(350, 50)">
+    <rect x="0" y="5" width="40" height="10" fill="none" stroke="black" stroke-width="0.5"/>
+    <path d="M -10 10 L 0 10 M 40 10 L 50 10"/>
+    <text x="20" y="30" text-anchor="middle">R1</text>
+    <text x="20" y="43" text-anchor="middle">10k</text>
+  </g>
+  
+  <!-- Component R2 -->
+  <g transform="translate(350, 120)">
+    <rect x="0" y="5" width="40" height="10" fill="none" stroke="black" stroke-width="0.5"/>
+    <path d="M -10 10 L 0 10 M 40 10 L 50 10"/>
+    <text x="20" y="30" text-anchor="middle">R2</text>
+    <text x="20" y="43" text-anchor="middle">1k</text>
+  </g>
+</svg>

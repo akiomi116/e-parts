@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>部品詳細</h2>
+
+  {% if part %}
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5 class="card-title">{{ part.name }}</h5>
+        <p class="card-text"><strong>ID:</strong> {{ part.id }}</p>
+        <p class="card-text"><strong>カテゴリ:</strong> {{ part.category }}</p>
+        <p class="card-text"><strong>パッケージ:</strong> {{ part.package }}</p>
+        <p class="card-text"><strong>在庫数:</strong> {{ part.quantity }}</p>
+        <p class="card-text"><strong>保管場所:</strong> {{ part.location }}</p>
+        <p class="card-text"><strong>備考:</strong> {{ part.note }}</p>
+        <p class="card-text"><strong>作成日時:</strong> {{ part.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        <p class="card-text"><strong>タグ:</strong>
+          {% if part.tags %}
+            {% for tag in part.tags %}
+              <span class="badge bg-info text-dark">{{ tag.name }}</span>
+            {% endfor %}
+          {% else %}
+            なし
+          {% endif %}
+        </p>
+        {% if part.image_path %}
+          <p class="card-text"><strong>画像:</strong> <img src="{{ url_for('static', filename=part.image_path) }}" alt="部品画像" class="img-fluid" style="max-width: 200px;"></p>
+        {% endif %}
+        {% if part.qr_path %}
+          <p class="card-text"><strong>QRコード:</strong> <img src="{{ url_for('static', filename=part.qr_path) }}" alt="QRコード" class="img-fluid" style="max-width: 200px;"></p>
+        {% endif %}
+      </div>
+    </div>
+    <a href="{{ url_for('parts.part_edit', part_id=part.id) }}" class="btn btn-warning">編集</a>
+    <a href="{{ url_for('parts.parts_list') }}" class="btn btn-secondary">一覧に戻る</a>
+  {% else %}
+    <p>部品が見つかりませんでした。</p>
+  {% endif %}
+</div>
+{% endblock %}

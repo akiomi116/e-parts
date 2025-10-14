@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>{{ '新規部品登録' if mode == 'create' else '部品情報の編集' }}</h2>
+
+  <form method="POST" action="{{ url_for('parts.part_edit', part_id=part.id) if mode=='edit' else url_for('parts.part_create') }}" enctype="multipart/form-data">
+
+    <div class="mb-3">
+      <label class="form-label">部品名</label>
+      <input type="text" class="form-control" name="name" value="{{ part.name if part else '' }}" required>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">部品画像</label>
+      <input type="file" class="form-control" name="image_file" accept="image/*">
+      {% if part and part.image_path %}
+        <small class="form-text text-muted">現在の画像: <a href="{{ url_for('static', filename=part.image_path) }}" target="_blank">{{ part.image_path.split('/')[-1] }}</a></small>
+      {% endif %}
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">カテゴリ</label>
+      <input type="text" class="form-control" name="category" value="{{ part.category if part else '' }}">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">パッケージ</label>
+      <input type="text" class="form-control" name="package" value="{{ part.package if part else '' }}">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">在庫数</label>
+      <input type="number" class="form-control" name="quantity" value="{{ part.quantity if part else 0 }}">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">保管場所</label>
+      <input type="text" class="form-control" name="location" value="{{ part.location if part else '' }}">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">備考</label>
+      <textarea class="form-control" name="note" rows="3">{{ part.note if part else '' }}</textarea>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">タグ</label>
+      <div>
+        {% for tag in all_tags %}
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" id="tag_{{ tag.id }}" name="tags" value="{{ tag.id }}"
+                   {% if part and tag in part.tags %}checked{% endif %}>
+            <label class="form-check-label" for="tag_{{ tag.id }}">{{ tag.name }}</label>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">登録</button>
+    <a href="{{ url_for('parts.parts_list') }}" class="btn btn-secondary">戻る</a>
+  </form>
+</div>
+{% endblock %}

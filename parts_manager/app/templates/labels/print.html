@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>ラベル印刷プレビュー</h2>
+
+  <button onclick="window.print()" class="btn btn-primary mb-3">このページを印刷</button>
+  <a href="{{ url_for('labels.labels_select') }}" class="btn btn-secondary mb-3">部品選択に戻る</a>
+
+  <div class="row">
+    {% for part in parts %}
+      <div class="col-md-4 mb-4">
+        <div class="card">
+          <div class="card-body text-center">
+            <h5 class="card-title">{{ part.name }}</h5>
+            <p class="card-text">ID: {{ part.id }}</p>
+            <p class="card-text">在庫: {{ part.quantity }}</p>
+            <p class="card-text">場所: {{ part.location }}</p>
+            {% if part.qr_path %}
+              <img src="{{ url_for('static', filename=part.qr_path) }}" alt="QRコード" class="img-fluid" style="max-width: 150px;">
+            {% else %}
+              <p>QRコードなし</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

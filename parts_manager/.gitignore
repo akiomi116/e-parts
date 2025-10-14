@@ -1,0 +1,13 @@
+# 仮想環境
+venv/
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+
+# DBファイル
+*.db
+instance/
+
+# マイグレーションキャッシュ
+migrations/

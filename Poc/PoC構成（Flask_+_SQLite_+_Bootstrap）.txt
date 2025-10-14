@@ -1,0 +1,302 @@
+PoC構成（Flask + SQLite + Bootstrap）
+1. 機能範囲
+	• CSVアップロード → bom_lines テーブルに保存
+	• BOMテーブル表示（Bootstrapのテーブル）
+	• SVG表示（回路図 or 基板、タブ切替）
+	• 双方向ハイライト（BOM行とSVG要素をReferenceで同期）
+👉 在庫管理や不足リストはPoC対象外（後で追加）。
+
+2. データベース（SQLite）
+最小限の1テーブル：
+CREATE TABLE bom_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference TEXT,
+    value TEXT,
+    footprint TEXT,
+    mpn TEXT,
+    quantity INTEGER
+);
+
+3. Flaskルート構成
+@app.route("/")
+def index():
+    return render_template("index.html")
+@app.route("/upload_bom", methods=["POST"])
+def upload_bom():
+    file = request.files["file"]
+    df = pd.read_csv(file)
+    for _, row in df.iterrows():
+        db.session.add(BomLine(
+            reference=row["Reference"],
+            value=row["Value"],
+            footprint=row["Footprint"],
+            mpn=row.get("MPN"),
+            quantity=row["Quantity"]
+        ))
+    db.session.commit()
+    return redirect(url_for("bom"))
+@app.route("/bom")
+def bom():
+    lines = BomLine.query.all()
+    return render_template("bom.html", lines=lines)
+
+4. テンプレート構成（Bootstrap）
+templates/bom.html
+	• 左カラム: BOMテーブル
+	• 右カラム: タブUI（回路図SVG / PCB SVG）
+<div class="row">
+  <!-- 左：BOM -->
+  <div class="col-4">
+    <table id="bom-table" class="table table-striped">
+      <thead>
+        <tr><th>Ref</th><th>Value</th><th>Footprint</th><th>MPN</th><th>Qty</th></tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+        <tr data-ref="{{ line.reference }}">
+          <td>{{ line.reference }}</td>
+          <td>{{ line.value }}</td>
+          <td>{{ line.footprint }}</td>
+          <td>{{ line.mpn }}</td>
+          <td>{{ line.quantity }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+<!-- 右：タブ切替 -->
+  <div class="col-8">
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#schematic">回路図</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pcb">基板図</button>
+      </li>
+    </ul>
+    <div class="tab-content border">
+      <div class="tab-pane fade show active" id="schematic">
+        <object id="schematic-svg" type="image/svg+xml" data="{{ url_for('static', filename='sample_schematic.svg') }}"></object>
+      </div>
+      <div class="tab-pane fade" id="pcb">
+        <object id="pcb-svg" type="image/svg+xml" data="{{ url_for('static', filename='sample_pcb.svg') }}"></object>
+      </div>
+    </div>
+  </div>
+</div>
+
+5. JSによる双方向ハイライト
+function highlightByRef(ref) {
+  // BOMテーブル
+  document.querySelectorAll("#bom-table tr").forEach(row => {
+    row.classList.toggle("highlight", row.dataset.ref === ref);
+  });
+// 回路図SVG
+  const schematicDoc = document.getElementById("schematic-svg").contentDocument;
+  schematicDoc.querySelectorAll("text").forEach(el => {
+    el.classList.toggle("svg-highlight", el.textContent.trim() === ref);
+  });
+// PCB SVG
+  const pcbDoc = document.getElementById("pcb-svg").contentDocument;
+  pcbDoc.querySelectorAll("text").forEach(el => {
+    el.classList.toggle("svg-highlight", el.textContent.trim() === ref);
+  });
+}
+// BOMクリック
+document.querySelectorAll("#bom-table tr").forEach(row => {
+  row.addEventListener("click", () => highlightByRef(row.dataset.ref));
+});
+
+6. CSS例
+.highlight { background-color: yellow; }
+.svg-highlight { fill: red; font-weight: bold; }
+
+7. このPoCで確認できること
+	1. BOM CSVを取り込み、DBに保存＆表示できる
+	2. 回路図SVG・PCB SVGをタブ切り替えで表示できる
+	3. BOMクリックでSVG内の部品が強調される（逆も可能にする）
+	4. 実際のKiCadプロジェクトから出力したCSV & SVGで検証できる
+
+
+📂 ディレクトリ配置（例）
+poc_app/
+├─ app.py                 # Flask本体
+├─ requirements.txt       # 依存ライブラリ
+├─ instance/
+│   └─ app.db             # SQLiteデータベース（自動生成される）
+├─ static/
+│   ├─ sample_bom.csv     # KiCadエクスポートのBOM CSV
+│   ├─ sample_schematic.svg  # 回路図SVG
+│   └─ sample_pcb.svg        # PCB SVG
+└─ templates/
+    ├─ index.html         # トップページ
+    └─ bom.html           # BOM + SVGビューア画面
+
+📦 requirements.txt
+flask
+flask_sqlalchemy
+pandas
+（BootstrapはCDNで読み込みます）
+
+🐍 app.py（Flask本体）
+import os
+import pandas as pd
+from flask import Flask, render_template, request, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
+# --- モデル定義 ---
+class BomLine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    reference = db.Column(db.String(50))
+    value = db.Column(db.String(100))
+    footprint = db.Column(db.String(100))
+    mpn = db.Column(db.String(100))
+    quantity = db.Column(db.Integer)
+# --- 初期化 ---
+@app.before_first_request
+def setup():
+    db.create_all()
+# --- ルート ---
+@app.route("/")
+def index():
+    return render_template("index.html")
+@app.route("/upload_bom", methods=["POST"])
+def upload_bom():
+    file = request.files["file"]
+    if not file:
+        return redirect(url_for("index"))
+    df = pd.read_csv(file)
+    for _, row in df.iterrows():
+        db.session.add(BomLine(
+            reference=row.get("Reference"),
+            value=row.get("Value"),
+            footprint=row.get("Footprint"),
+            mpn=row.get("MPN"),
+            quantity=row.get("Quantity", 1)
+        ))
+    db.session.commit()
+    return redirect(url_for("bom"))
+@app.route("/bom")
+def bom():
+    lines = BomLine.query.all()
+    return render_template("bom.html", lines=lines)
+if __name__ == "__main__":
+    app.run(debug=True)
+
+🖥️ templates/index.html
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>PoC - CSVアップロード</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-3">
+  <h1>PoC: KiCad BOM + SVG ビューア</h1>
+  <form action="{{ url_for('upload_bom') }}" method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">BOM CSVファイルを選択</label>
+      <input type="file" name="file" class="form-control">
+    </div>
+    <button type="submit" class="btn btn-primary">アップロード</button>
+  </form>
+</body>
+</html>
+
+🖥️ templates/bom.html
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>BOMビューア</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .highlight { background-color: yellow; }
+    .svg-highlight { fill: red; font-weight: bold; }
+  </style>
+</head>
+<body class="p-3">
+  <h1>BOM + 回路図 / PCB ビューア</h1>
+  <div class="row">
+    <!-- 左ペイン：BOMテーブル -->
+    <div class="col-4">
+      <table id="bom-table" class="table table-striped">
+        <thead>
+          <tr><th>Ref</th><th>Value</th><th>Footprint</th><th>MPN</th><th>Qty</th></tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+          <tr data-ref="{{ line.reference }}">
+            <td>{{ line.reference }}</td>
+            <td>{{ line.value }}</td>
+            <td>{{ line.footprint }}</td>
+            <td>{{ line.mpn }}</td>
+            <td>{{ line.quantity }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+<!-- 右ペイン：タブ切替 -->
+    <div class="col-8">
+      <ul class="nav nav-tabs">
+        <li class="nav-item">
+          <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#schematic">回路図</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pcb">基板図</button>
+        </li>
+      </ul>
+      <div class="tab-content border" style="height:80vh; overflow:auto;">
+        <div class="tab-pane fade show active" id="schematic">
+          <object id="schematic-svg" type="image/svg+xml"
+                  data="{{ url_for('static', filename='sample_schematic.svg') }}"
+                  style="width:100%; height:100%;"></object>
+        </div>
+        <div class="tab-pane fade" id="pcb">
+          <object id="pcb-svg" type="image/svg+xml"
+                  data="{{ url_for('static', filename='sample_pcb.svg') }}"
+                  style="width:100%; height:100%;"></object>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+    function highlightByRef(ref) {
+      // BOM行
+      document.querySelectorAll("#bom-table tr").forEach(row => {
+        row.classList.toggle("highlight", row.dataset.ref === ref);
+      });
+// 回路図
+      const schematicDoc = document.getElementById("schematic-svg").contentDocument;
+      if (schematicDoc) {
+        schematicDoc.querySelectorAll("text").forEach(el => {
+          el.classList.toggle("svg-highlight", el.textContent.trim() === ref);
+        });
+      }
+// PCB
+      const pcbDoc = document.getElementById("pcb-svg").contentDocument;
+      if (pcbDoc) {
+        pcbDoc.querySelectorAll("text").forEach(el => {
+          el.classList.toggle("svg-highlight", el.textContent.trim() === ref);
+        });
+      }
+    }
+// BOMクリックイベント
+    document.querySelectorAll("#bom-table tr").forEach(row => {
+      row.addEventListener("click", () => highlightByRef(row.dataset.ref));
+    });
+  </script>
+</body>
+</html>
+
+✅ 実行方法
+cd poc_app
+python -m venv venv
+source venv/bin/activate  # Windowsは venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
+ブラウザで http://127.0.0.1:5000 を開くと利用できます。

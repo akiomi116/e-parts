@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}CSV一括アップロード{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">CSV一括アップロード</h1>
+
+<div class="card">
+    <div class="card-body">
+        <p class="card-text">
+            以下の形式のCSVファイルをアップロードしてください。<br>
+            ヘッダー行は必須です。
+        </p>
+        <pre><code>name,category,package,quantity,location,note,tags</code></pre>
+        <p class="card-text">
+            ・<strong>tags</strong>: 複数のタグはカンマ(,)で区切って指定します。<br>
+            ・<strong>image_path</strong>, <strong>qr_path</strong>, <strong>created_at</strong> は自動で設定されるため、CSVに含める必要はありません。
+        </p>
+
+        <form method="post" enctype="multipart/form-data" class="mt-4">
+            <div class="mb-3">
+                <label for="csv_file" class="form-label">CSVファイルを選択</label>
+                <input type="file" name="csv_file" id="csv_file" class="form-control" accept=".csv" required>
+            </div>
+            <button type="submit" class="btn btn-primary">アップロード</button>
+            <a href="{{ url_for('parts.parts_list') }}" class="btn btn-secondary">キャンセル</a>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

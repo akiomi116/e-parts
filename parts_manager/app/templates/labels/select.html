@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>ラベル印刷用部品選択</h2>
+
+  <form action="{{ url_for('labels.labels_print') }}" method="GET">
+    {% if parts %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>選択</th>
+            <th>ID</th>
+            <th>部品名</th>
+            <th>カテゴリ</th>
+            <th>保管場所</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for part in parts %}
+          <tr>
+            <td>
+              <input type="checkbox" name="part_ids" value="{{ part.id }}">
+            </td>
+            <td>{{ part.id }}</td>
+            <td>{{ part.name }}</td>
+            <td>{{ part.category }}</td>
+            <td>{{ part.location }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="submit" class="btn btn-primary">選択した部品のラベルを印刷</button>
+    {% else %}
+      <p>まだ部品が登録されていません。</p>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

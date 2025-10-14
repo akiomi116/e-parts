@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>BOMビューア</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+    .main-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    .content-row {
+      flex-grow: 1;
+      overflow-y: hidden;
+    }
+    .scrollable-col {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .svg-container, .tab-content, .tab-pane {
+      height: 100%;
+      width: 100%;
+    }
+    .svg-container svg {
+        width: 100%;
+        height: 100%;
+    }
+    #bom-table tbody tr {
+      cursor: pointer;
+    }
+    #bom-table tbody tr.highlight td,
+    #bom-table.table-hover tbody tr.highlight:hover td {
+        background-color: #0d6efd !important;
+        color: white !important;
+        font-weight: bold;
+    }
+    /* Style for BOM rows where the component is not found in the SVG */
+    #bom-table tbody tr.not-found td {
+        background-color: #ffc107 !important; /* Bootstrap's warning yellow */
+        transition: background-color 0.2s ease-in-out;
+    }
+    /* SVGハイライト用のスタイル */
+    g.svg-highlight text {
+      fill: red !important; /* Make text red and bold */
+      font-weight: bold;
+    }
+    g.svg-highlight path,
+    g.svg-highlight rect,
+    g.svg-highlight circle,
+    g.svg-highlight polygon {
+      /* Apply glow only to shapes, not text */
+      filter: drop-shadow(0px 0px 2px red) drop-shadow(0px 0px 2px red);
+      -webkit-filter: drop-shadow(0px 0px 2px red) drop-shadow(0px 0px 2px red);
+      /* Also ensure stroke is visible */
+      stroke: red !important;
+      stroke-width: 1px;
+    }
+    .svg-pan-zoom-control-background {
+      fill: rgba(255,255,255,0.8);
+      stroke: rgba(0,0,0,0.2);
+    }
+    .svg-pan-zoom-control-element {
+      fill: rgba(0,0,0,0.5);
+    }
+    .svg-pan-zoom-control-element:hover {
+      fill: rgba(0,0,0,0.9);
+    }
+  </style>
+</head>
+<body>
+  <div class="main-container p-3">
+    <h1>BOM + 回路図 / PCB ビューア</h1>
+    <div class="row content-row">
+      <div class="col-4 scrollable-col">
+        <table id="bom-table" class="table table-striped table-hover">
+          <thead>
+            <tr><th>Ref</th><th>Value</th><th>Footprint</th><th>MPN</th><th>Qty</th></tr>
+          </thead>
+          <tbody>
+            {% for line in lines %}
+            <tr data-ref="{{ line.reference }}">
+              <td>{{ line.reference }}</td>
+              <td>{{ line.value }}</td>
+              <td>{{ line.footprint }}</td>
+              <td>{{ line.mpn }}</td>
+              <td>{{ line.quantity }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="col-8 d-flex flex-column">
+        <ul class="nav nav-tabs">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#schematic">回路図</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pcb">基板図</button>
+          </li>
+        </ul>
+        <div class="tab-content border border-top-0 flex-grow-1">
+          <div class="tab-pane fade show active" id="schematic">
+            <div id="schematic-container" class="svg-container"></div>
+          </div>
+          <div class="tab-pane fade" id="pcb">
+            <div id="pcb-container" class="svg-container"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+  window.addEventListener('DOMContentLoaded', function() {
+    let activeRef = null;
+    const schematicContainer = document.getElementById('schematic-container');
+    const pcbContainer = document.getElementById('pcb-container');
+
+    function highlightInSvg(svgElement, ref) {
+      if (!svgElement) return false;
+      let found = false;
+      svgElement.querySelectorAll('g.svg-highlight').forEach(g => g.classList.remove('svg-highlight'));
+      if (ref) {
+        svgElement.querySelectorAll('g.stroked-text').forEach(strokedTextGroup => {
+          const descElement = strokedTextGroup.querySelector('desc');
+          if (descElement && descElement.textContent.trim() === ref) {
+            // Highlight only the stroked-text group itself to avoid highlighting large parent groups in PCB files.
+            strokedTextGroup.classList.add('svg-highlight');
+            found = true;
+          }
+        });
+      }
+      return found;
+    }
+
+    function highlightByRef(ref) {
+      activeRef = (ref === activeRef) ? null : ref;
+
+      // Update BOM table row highlighting
+      document.querySelectorAll("#bom-table tr[data-ref]").forEach(row => {
+        row.classList.remove('not-found'); // Clear previous not-found states
+        row.classList.toggle("highlight", row.dataset.ref === activeRef);
+      });
+
+      // Highlight in SVGs and check if found
+      const foundInSchematic = highlightInSvg(schematicContainer.querySelector('svg'), activeRef);
+      const foundInPcb = highlightInSvg(pcbContainer.querySelector('svg'), activeRef);
+
+      // If active and not found in either SVG, give visual feedback
+      if (activeRef && !foundInSchematic && !foundInPcb) {
+        const row = document.querySelector(`#bom-table tr[data-ref="${activeRef}"]`);
+        if (row) {
+          row.classList.add('not-found');
+          // The 'highlight' class is blue, which overrides yellow. Remove it for the flash.
+          row.classList.remove('highlight');
+          setTimeout(() => {
+            // Restore highlight class if it's still the active ref
+            if(row.dataset.ref === activeRef) {
+                row.classList.add('highlight');
+            }
+            row.classList.remove('not-found');
+          }, 1000);
+        }
+      }
+    }
+
+    document.querySelectorAll("#bom-table tr[data-ref]").forEach(row => {
+      row.addEventListener("click", () => highlightByRef(row.dataset.ref));
+    });
+
+    function initPanZoom(container, svgElement) {
+        if (container.panZoomInitialized) return;
+
+        const panZoomInstance = svgPanZoom(svgElement, {
+            zoomEnabled: true,
+            controlIconsEnabled: true,
+            fit: true,
+            center: true,
+            minZoom: 0.1,
+            maxZoom: 50,
+            doubleClickZoomEnabled: false, // Disable default double-click zoom
+        });
+        svgElement.panZoomInstance = panZoomInstance;
+        container.panZoomInitialized = true;
+
+        // Attach a standard click event listener directly to the SVG element
+        svgElement.addEventListener('click', (event) => {
+            // Check if a pan was just performed.
+            if (svgElement.panZoomInstance && typeof svgElement.panZoomInstance.isPanning === 'function' && svgElement.panZoomInstance.isPanning()) {
+                return;
+            }
+
+            let target = event.target;
+            let ref = null;
+            if (target.tagName === 'text') {
+                ref = target.textContent.trim();
+            } else {
+                const parentGroup = target.closest('g');
+                if (parentGroup) {
+                    const textElement = parentGroup.querySelector('text');
+                    if (textElement) ref = textElement.textContent.trim();
+                }
+            }
+
+            if (ref && document.querySelector(`#bom-table tr[data-ref="${ref}"]`)) {
+                highlightByRef(ref);
+                const bomRow = document.querySelector(`#bom-table tr[data-ref="${ref}"]`);
+                if (bomRow) bomRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    }
+
+    async function loadAndInitSvg(container, url, isInitiallyActive) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const svgText = await response.text();
+        container.innerHTML = svgText;
+        const svgElement = container.querySelector('svg');
+        if (!svgElement) throw new Error('SVG element not found after injection.');
+
+        container.svgElement = svgElement; // Store svgElement on container
+
+        // Initialize pan-zoom if active, or mark for later initialization
+        if (isInitiallyActive) {
+            initPanZoom(container, svgElement);
+        } else {
+            container.panZoomInitialized = false; // Mark as not yet initialized
+        }
+
+        
+
+      } catch (e) {
+        console.error(`Failed to load SVG from ${url}:`, e);
+        container.innerHTML = `<div class="p-3 text-danger">Error loading SVG: ${e.message}</div>`;
+      }
+    }
+
+    // Load SVGs. Schematic is initially active.
+    loadAndInitSvg(schematicContainer, "{{ url_for('static', filename=schematic_svg) }}", true);
+    loadAndInitSvg(pcbContainer, "{{ url_for('static', filename=pcb_svg) }}", false); // PCB is not initially active
+
+    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
+      tab.addEventListener('shown.bs.tab', function (event) {
+        const paneId = event.target.getAttribute('data-bs-target');
+        const container = document.querySelector(paneId + '-container'); // Get the container div
+        const svgElement = container.svgElement; // Retrieve the stored svgElement
+
+        if (svgElement) {
+            // Initialize pan-zoom if not already done
+            if (!container.panZoomInitialized) {
+                initPanZoom(container, svgElement);
+            }
+            // Always resize and center when tab is shown
+            if (svgElement.panZoomInstance) {
+                svgElement.panZoomInstance.resize();
+                svgElement.panZoomInstance.center();
+                svgElement.panZoomInstance.fit(); // Fit to view on show
+            }
+        }
+      });
+    });
+  });
+</script>
+</body>
+</html>

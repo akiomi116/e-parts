@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  {% if mode == 'create' %}
+    <h2>新規タグ登録</h2>
+  {% elif mode == 'edit' %}
+    <h2>タグ編集</h2>
+  {% endif %}
+
+  <form action="{% if mode == 'create' %}{{ url_for('tags.tag_list') }}{% elif mode == 'edit' %}{{ url_for('tags.tag_edit', tag_id=tag.id) }}{% endif %}" method="POST">
+    <div class="mb-3">
+      <label for="name" class="form-label">タグ名</label>
+      <input type="text" class="form-control" id="name" name="name" value="{% if tag %}{{ tag.name }}{% endif %}" required>
+    </div>
+    <button type="submit" class="btn btn-primary">{% if mode == 'create' %}登録{% else %}更新{% endif %}</button>
+    <a href="{{ url_for('tags.tag_list') }}" class="btn btn-secondary">キャンセル</a>
+  </form>
+</div>
+{% endblock %}
