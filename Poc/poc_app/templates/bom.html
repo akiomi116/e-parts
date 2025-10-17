@@ -92,6 +92,9 @@
         </table>
       </div>
       <div class="d-flex flex-column">
+        <div class="alert alert-info py-1 px-2 small">
+          <strong>操作ガイド:</strong> 部品をクリックすると連動してハイライトされます。より正確に反応させるには、<code>R1</code>や<code>C1</code>などの**部品番号**の近くをクリックしてください。
+        </div>
         <ul class="nav nav-tabs">
           <li class="nav-item">
             <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#schematic">回路図</button>
@@ -134,37 +137,49 @@ window.addEventListener('DOMContentLoaded', function() {
     return found;
   }
 
-  // 🌀 リサイズ対応：右パネル幅を考慮してスムーズパン
+  // 🌀 画面中央へスムーズにパン
   function smoothPanTo(svgElement, bbox) {
     if (!svgElement || !svgElement.panZoomInstance) return;
-    const panZoom = svgElement.panZoomInstance;
-    const zoom = panZoom.getZoom();
 
-    const rect = svgElement.getBoundingClientRect(); // ← 現在の右領域サイズを取得
+    const panZoom = svgElement.panZoomInstance;
+    const sizes = panZoom.getSizes();
+    const zoom = sizes.realZoom;
+
+    // BBoxの中心座標を計算
     const cx = bbox.x + bbox.width / 2;
     const cy = bbox.y + bbox.height / 2;
 
+    // 中央に表示するための目標Pan座標を計算
     const targetPan = {
-      x: rect.width / 2 - cx * zoom,
-      y: rect.height / 2 - cy * zoom
+      x: (sizes.width / 2) - (cx * zoom),
+      y: (sizes.height / 2) - (cy * zoom)
     };
 
     const currentPan = panZoom.getPan();
-    const steps = 20;
-    let step = 0;
-    const deltaX = (targetPan.x - currentPan.x) / steps;
-    const deltaY = (targetPan.y - currentPan.y) / steps;
+    const duration = 300; // アニメーション時間 (ms)
+    let startTime = null;
 
-    function animate() {
-      if (step++ < steps) {
-        panZoom.pan({
-          x: currentPan.x + deltaX * step,
-          y: currentPan.y + deltaY * step
-        });
+    function animate(timestamp) {
+      if (!startTime) startTime = timestamp;
+      // 0から1への進捗を計算
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      // イージング関数（ease-out）
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+      // 中間Pan座標を計算
+      const animatedPan = {
+        x: currentPan.x + (targetPan.x - currentPan.x) * easeProgress,
+        y: currentPan.y + (targetPan.y - currentPan.y) * easeProgress
+      };
+
+      panZoom.pan(animatedPan);
+
+      if (progress < 1) {
         requestAnimationFrame(animate);
       }
     }
-    animate();
+
+    requestAnimationFrame(animate);
   }
 
   function highlightByRef(ref) {
@@ -216,28 +231,113 @@ window.addEventListener('DOMContentLoaded', function() {
       center: true,
       minZoom: 0.1,
       maxZoom: 50,
-      doubleClickZoomEnabled: false,
-      onDblClick: function() {},
+      doubleClickZoomEnabled: false
     });
+
+    // Custom click vs. drag/pan detection to avoid conflicts with the library
+    let mouseDownPos = null;
+    let isPanning = false;
+    svgElement.addEventListener('mousedown', (e) => {
+      mouseDownPos = {x: e.clientX, y: e.clientY};
+      isPanning = false; // Reset panning flag
+    });
+
+    svgElement.addEventListener('mousemove', (e) => {
+        // If mouse moves more than a few pixels after mousedown, it's a pan
+        if (mouseDownPos && !isPanning) {
+            const dx = e.clientX - mouseDownPos.x;
+            const dy = e.clientY - mouseDownPos.y;
+            if (Math.sqrt(dx*dx + dy*dy) > 5) {
+                isPanning = true;
+            }
+        }
+    });
+
+    svgElement.addEventListener('mouseup', (e) => {
+      if (isPanning) {
+        mouseDownPos = null;
+        return;
+      }
+
+      const target = e.target;
+      let ref = null;
+
+      // Strategy 1: DOM traversal
+      const parentGroup = target.closest('g');
+      if (parentGroup) {
+        let descElement = parentGroup.querySelector('desc');
+        if (!descElement) {
+          const strokedTextGroup = parentGroup.querySelector('g.stroked-text');
+          if (strokedTextGroup) {
+            descElement = strokedTextGroup.querySelector('desc');
+          }
+        }
+        if (descElement) {
+          ref = descElement.textContent.trim();
+        }
+      }
+
+      // Strategy 2: Proximity search fallback
+      if (!ref) {
+        const clickBBox = e.target.getBBox();
+        const clickPoint = {
+          x: clickBBox.x + clickBBox.width / 2,
+          y: clickBBox.y + clickBBox.height / 2
+        };
+        let closest = { ref: null, distance: Infinity };
+
+        svgElement.querySelectorAll('g.stroked-text').forEach(strokedTextGroup => {
+          const descElement = strokedTextGroup.querySelector('desc');
+          if (descElement) {
+            const candidateRef = descElement.textContent.trim();
+            const candidateBBox = strokedTextGroup.getBBox();
+            const candidatePoint = {
+              x: candidateBBox.x + candidateBBox.width / 2,
+              y: candidateBBox.y + candidateBBox.height / 2
+            };
+            const dx = clickPoint.x - candidatePoint.x;
+            const dy = clickPoint.y - candidatePoint.y;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            if (distance < closest.distance) {
+              closest.distance = distance;
+              closest.ref = candidateRef;
+            }
+          }
+        });
+
+        if (closest.distance < 30) {
+          ref = closest.ref;
+        }
+      }
+
+      // Final validation and highlight
+      if (ref && !document.querySelector(`#bom-table tr[data-ref="${ref}"]`)) {
+        ref = null;
+      }
+
+      highlightByRef(ref);
+
+      if (activeRef) {
+        const bomRow = document.querySelector(`#bom-table tr[data-ref="${activeRef}"]`);
+        if (bomRow) {
+          bomRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+      
+      mouseDownPos = null;
+    });
+
+
     svgElement.panZoomInstance = panZoomInstance;
     container.panZoomInitialized = true;
 
-    svgElement.addEventListener('click', (event) => {
-      if (panZoomInstance.isPanning()) return;
-      const target = event.target;
-      const componentGroup = target.closest('g.stroked-text');
-      let ref = null;
-      if (componentGroup) {
-        const descElement = componentGroup.querySelector('desc');
-        if (descElement) ref = descElement.textContent.trim();
-      }
-      if (ref && !document.querySelector(`#bom-table tr[data-ref="${ref}"]`)) ref = null;
-      highlightByRef(ref);
-      if (activeRef) {
-        const bomRow = document.querySelector(`#bom-table tr[data-ref="${activeRef}"]`);
-        if (bomRow) bomRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    });
+    // ✅ パネルリサイズ時にSVGのサイズを更新するためのObserver
+    if (window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(() => {
+        panZoomInstance.resize();
+      });
+      resizeObserver.observe(container);
+    }
   }
 
   async function loadAndInitSvg(container, url, isInitiallyActive) {
@@ -280,14 +380,13 @@ window.addEventListener('DOMContentLoaded', function() {
   loadAndInitSvg(schematicContainer, "{{ url_for('static', filename=schematic_svg) }}", true);
   loadAndInitSvg(pcbContainer, "{{ url_for('static', filename=pcb_svg) }}", false);
 
-  // ✅ 右領域がリサイズされた時にも自動補正
+  // ✅ ウィンドウリサイズ時にSVGのサイズを更新
   window.addEventListener('resize', () => {
     [schematicContainer, pcbContainer].forEach(container => {
       const svg = container.svgElement;
       if (svg && svg.panZoomInstance) {
+        // ビューをリセットせず、内部のサイズ情報のみ更新
         svg.panZoomInstance.resize();
-        svg.panZoomInstance.fit();
-        svg.panZoomInstance.center();
       }
     });
   });
