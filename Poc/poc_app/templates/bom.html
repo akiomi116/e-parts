@@ -18,19 +18,28 @@
     }
     .content-row {
       flex-grow: 1;
-      overflow-y: hidden;
+      display: grid;
+      grid-template-columns: 1fr 2fr; /* 左右の比率（可変） */
+      grid-template-rows: 100%;
+      overflow: hidden;
     }
+    /* 左側（部品表）をドラッグで可変にする */
     .scrollable-col {
-      height: 100%;
+      resize: horizontal;
       overflow-y: auto;
+      overflow-x: hidden;
+      min-width: 250px;
+      max-width: 80vw;
+      border-right: 3px solid #ddd;
     }
     .svg-container, .tab-content, .tab-pane {
       height: 100%;
       width: 100%;
     }
     .svg-container svg {
-        width: 100%;
-        height: 100%;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
     }
     #bom-table tbody tr {
       cursor: pointer;
@@ -41,44 +50,30 @@
         color: white !important;
         font-weight: bold;
     }
-    /* Style for BOM rows where the component is not found in the SVG */
     #bom-table tbody tr.not-found td {
-        background-color: #ffc107 !important; /* Bootstrap's warning yellow */
+        background-color: #ffc107 !important;
         transition: background-color 0.2s ease-in-out;
     }
-    /* SVGハイライト用のスタイル */
     g.svg-highlight text {
-      fill: red !important; /* Make text red and bold */
+      fill: red !important;
       font-weight: bold;
     }
     g.svg-highlight path,
     g.svg-highlight rect,
     g.svg-highlight circle,
     g.svg-highlight polygon {
-      /* Apply glow only to shapes, not text */
       filter: drop-shadow(0px 0px 2px red) drop-shadow(0px 0px 2px red);
       -webkit-filter: drop-shadow(0px 0px 2px red) drop-shadow(0px 0px 2px red);
-      /* Also ensure stroke is visible */
       stroke: red !important;
       stroke-width: 1px;
-    }
-    .svg-pan-zoom-control-background {
-      fill: rgba(255,255,255,0.8);
-      stroke: rgba(0,0,0,0.2);
-    }
-    .svg-pan-zoom-control-element {
-      fill: rgba(0,0,0,0.5);
-    }
-    .svg-pan-zoom-control-element:hover {
-      fill: rgba(0,0,0,0.9);
     }
   </style>
 </head>
 <body>
   <div class="main-container p-3">
     <h1>BOM + 回路図 / PCB ビューア</h1>
-    <div class="row content-row">
-      <div class="col-4 scrollable-col">
+    <div class="content-row">
+      <div class="scrollable-col p-2">
         <table id="bom-table" class="table table-striped table-hover">
           <thead>
             <tr><th>Ref</th><th>Value</th><th>Footprint</th><th>MPN</th><th>Qty</th></tr>
@@ -96,7 +91,7 @@
           </tbody>
         </table>
       </div>
-      <div class="col-8 d-flex flex-column">
+      <div class="d-flex flex-column">
         <ul class="nav nav-tabs">
           <li class="nav-item">
             <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#schematic">回路図</button>
@@ -116,157 +111,206 @@
       </div>
     </div>
   </div>
+
 <script>
-  window.addEventListener('DOMContentLoaded', function() {
-    let activeRef = null;
-    const schematicContainer = document.getElementById('schematic-container');
-    const pcbContainer = document.getElementById('pcb-container');
+window.addEventListener('DOMContentLoaded', function() {
+  let activeRef = null;
+  const schematicContainer = document.getElementById('schematic-container');
+  const pcbContainer = document.getElementById('pcb-container');
 
-    function highlightInSvg(svgElement, ref) {
-      if (!svgElement) return false;
-      let found = false;
-      svgElement.querySelectorAll('g.svg-highlight').forEach(g => g.classList.remove('svg-highlight'));
-      if (ref) {
-        svgElement.querySelectorAll('g.stroked-text').forEach(strokedTextGroup => {
-          const descElement = strokedTextGroup.querySelector('desc');
-          if (descElement && descElement.textContent.trim() === ref) {
-            // Highlight only the stroked-text group itself to avoid highlighting large parent groups in PCB files.
-            strokedTextGroup.classList.add('svg-highlight');
-            found = true;
-          }
-        });
-      }
-      return found;
-    }
-
-    function highlightByRef(ref) {
-      activeRef = (ref === activeRef) ? null : ref;
-
-      // Update BOM table row highlighting
-      document.querySelectorAll("#bom-table tr[data-ref]").forEach(row => {
-        row.classList.remove('not-found'); // Clear previous not-found states
-        row.classList.toggle("highlight", row.dataset.ref === activeRef);
-      });
-
-      // Highlight in SVGs and check if found
-      const foundInSchematic = highlightInSvg(schematicContainer.querySelector('svg'), activeRef);
-      const foundInPcb = highlightInSvg(pcbContainer.querySelector('svg'), activeRef);
-
-      // If active and not found in either SVG, give visual feedback
-      if (activeRef && !foundInSchematic && !foundInPcb) {
-        const row = document.querySelector(`#bom-table tr[data-ref="${activeRef}"]`);
-        if (row) {
-          row.classList.add('not-found');
-          // The 'highlight' class is blue, which overrides yellow. Remove it for the flash.
-          row.classList.remove('highlight');
-          setTimeout(() => {
-            // Restore highlight class if it's still the active ref
-            if(row.dataset.ref === activeRef) {
-                row.classList.add('highlight');
-            }
-            row.classList.remove('not-found');
-          }, 1000);
+  function highlightInSvg(svgElement, ref) {
+    if (!svgElement) return false;
+    let found = false;
+    svgElement.querySelectorAll('g.svg-highlight').forEach(g => g.classList.remove('svg-highlight'));
+    if (ref) {
+      svgElement.querySelectorAll('g.stroked-text').forEach(strokedTextGroup => {
+        const descElement = strokedTextGroup.querySelector('desc');
+        if (descElement && descElement.textContent.trim() === ref) {
+          strokedTextGroup.classList.add('svg-highlight');
+          found = true;
         }
+      });
+    }
+    return found;
+  }
+
+  // 🌀 リサイズ対応：右パネル幅を考慮してスムーズパン
+  function smoothPanTo(svgElement, bbox) {
+    if (!svgElement || !svgElement.panZoomInstance) return;
+    const panZoom = svgElement.panZoomInstance;
+    const zoom = panZoom.getZoom();
+
+    const rect = svgElement.getBoundingClientRect(); // ← 現在の右領域サイズを取得
+    const cx = bbox.x + bbox.width / 2;
+    const cy = bbox.y + bbox.height / 2;
+
+    const targetPan = {
+      x: rect.width / 2 - cx * zoom,
+      y: rect.height / 2 - cy * zoom
+    };
+
+    const currentPan = panZoom.getPan();
+    const steps = 20;
+    let step = 0;
+    const deltaX = (targetPan.x - currentPan.x) / steps;
+    const deltaY = (targetPan.y - currentPan.y) / steps;
+
+    function animate() {
+      if (step++ < steps) {
+        panZoom.pan({
+          x: currentPan.x + deltaX * step,
+          y: currentPan.y + deltaY * step
+        });
+        requestAnimationFrame(animate);
       }
     }
+    animate();
+  }
+
+  function highlightByRef(ref) {
+    activeRef = (ref === activeRef) ? null : ref;
 
     document.querySelectorAll("#bom-table tr[data-ref]").forEach(row => {
-      row.addEventListener("click", () => highlightByRef(row.dataset.ref));
+      row.classList.remove('not-found');
+      row.classList.toggle("highlight", row.dataset.ref === activeRef);
     });
 
-    function initPanZoom(container, svgElement) {
-        if (container.panZoomInitialized) return;
+    const foundInSchematic = highlightInSvg(schematicContainer.querySelector('svg'), activeRef);
+    const foundInPcb = highlightInSvg(pcbContainer.querySelector('svg'), activeRef);
 
-        const panZoomInstance = svgPanZoom(svgElement, {
-            zoomEnabled: true,
-            controlIconsEnabled: true,
-            fit: true,
-            center: true,
-            minZoom: 0.1,
-            maxZoom: 50,
-            doubleClickZoomEnabled: false, // Disable default double-click zoom
-        });
-        svgElement.panZoomInstance = panZoomInstance;
-        container.panZoomInitialized = true;
-
-        // Attach a standard click event listener directly to the SVG element
-        svgElement.addEventListener('click', (event) => {
-            // Check if a pan was just performed.
-            if (svgElement.panZoomInstance && typeof svgElement.panZoomInstance.isPanning === 'function' && svgElement.panZoomInstance.isPanning()) {
-                return;
-            }
-
-            let target = event.target;
-            let ref = null;
-            if (target.tagName === 'text') {
-                ref = target.textContent.trim();
-            } else {
-                const parentGroup = target.closest('g');
-                if (parentGroup) {
-                    const textElement = parentGroup.querySelector('text');
-                    if (textElement) ref = textElement.textContent.trim();
-                }
-            }
-
-            if (ref && document.querySelector(`#bom-table tr[data-ref="${ref}"]`)) {
-                highlightByRef(ref);
-                const bomRow = document.querySelector(`#bom-table tr[data-ref="${ref}"]`);
-                if (bomRow) bomRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        });
-    }
-
-    async function loadAndInitSvg(container, url, isInitiallyActive) {
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const svgText = await response.text();
-        container.innerHTML = svgText;
-        const svgElement = container.querySelector('svg');
-        if (!svgElement) throw new Error('SVG element not found after injection.');
-
-        container.svgElement = svgElement; // Store svgElement on container
-
-        // Initialize pan-zoom if active, or mark for later initialization
-        if (isInitiallyActive) {
-            initPanZoom(container, svgElement);
-        } else {
-            container.panZoomInitialized = false; // Mark as not yet initialized
-        }
-
-        
-
-      } catch (e) {
-        console.error(`Failed to load SVG from ${url}:`, e);
-        container.innerHTML = `<div class="p-3 text-danger">Error loading SVG: ${e.message}</div>`;
+    if (activeRef && !foundInSchematic && !foundInPcb) {
+      const row = document.querySelector(`#bom-table tr[data-ref="${activeRef}"]`);
+      if (row) {
+        row.classList.add('not-found');
+        row.classList.remove('highlight');
+        setTimeout(() => {
+          if(row.dataset.ref === activeRef) row.classList.add('highlight');
+          row.classList.remove('not-found');
+        }, 1000);
       }
     }
 
-    // Load SVGs. Schematic is initially active.
-    loadAndInitSvg(schematicContainer, "{{ url_for('static', filename=schematic_svg) }}", true);
-    loadAndInitSvg(pcbContainer, "{{ url_for('static', filename=pcb_svg) }}", false); // PCB is not initially active
+    // ✅ ズーム固定、スムーズパンのみ
+    const activeSvg = foundInSchematic ? schematicContainer.querySelector('svg') :
+                     foundInPcb ? pcbContainer.querySelector('svg') : null;
+    if (activeSvg && activeRef) {
+      const highlightedGroup = activeSvg.querySelector('g.svg-highlight');
+      if (highlightedGroup) {
+        const bbox = highlightedGroup.getBBox();
+        smoothPanTo(activeSvg, bbox);
+      }
+    }
+  }
 
-    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
-      tab.addEventListener('shown.bs.tab', function (event) {
-        const paneId = event.target.getAttribute('data-bs-target');
-        const container = document.querySelector(paneId + '-container'); // Get the container div
-        const svgElement = container.svgElement; // Retrieve the stored svgElement
+  document.querySelectorAll("#bom-table tr[data-ref]").forEach(row => {
+    row.addEventListener("click", () => highlightByRef(row.dataset.ref));
+  });
 
-        if (svgElement) {
-            // Initialize pan-zoom if not already done
-            if (!container.panZoomInitialized) {
-                initPanZoom(container, svgElement);
-            }
-            // Always resize and center when tab is shown
-            if (svgElement.panZoomInstance) {
-                svgElement.panZoomInstance.resize();
-                svgElement.panZoomInstance.center();
-                svgElement.panZoomInstance.fit(); // Fit to view on show
-            }
-        }
-      });
+  function initPanZoom(container, svgElement) {
+    if (container.panZoomInitialized) return;
+
+    const panZoomInstance = svgPanZoom(svgElement, {
+      zoomEnabled: true,
+      controlIconsEnabled: true,
+      fit: true,
+      center: true,
+      minZoom: 0.1,
+      maxZoom: 50,
+      doubleClickZoomEnabled: false,
+      onDblClick: function() {},
+    });
+    svgElement.panZoomInstance = panZoomInstance;
+    container.panZoomInitialized = true;
+
+    svgElement.addEventListener('click', (event) => {
+      if (panZoomInstance.isPanning()) return;
+      const target = event.target;
+      const componentGroup = target.closest('g.stroked-text');
+      let ref = null;
+      if (componentGroup) {
+        const descElement = componentGroup.querySelector('desc');
+        if (descElement) ref = descElement.textContent.trim();
+      }
+      if (ref && !document.querySelector(`#bom-table tr[data-ref="${ref}"]`)) ref = null;
+      highlightByRef(ref);
+      if (activeRef) {
+        const bomRow = document.querySelector(`#bom-table tr[data-ref="${activeRef}"]`);
+        if (bomRow) bomRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
+
+  async function loadAndInitSvg(container, url, isInitiallyActive) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const svgText = await response.text();
+      container.innerHTML = svgText;
+      const svgElement = container.querySelector('svg');
+      if (!svgElement) throw new Error('SVG element not found.');
+
+      container.svgElement = svgElement;
+      if (isInitiallyActive) {
+        initPanZoom(container, svgElement);
+      } else {
+        container.panZoomInitialized = false;
+      }
+
+      highlightByRef(null);
+      checkMissingRefs(svgElement);
+
+    } catch (e) {
+      console.error(`Failed to load SVG from ${url}:`, e);
+      container.innerHTML = `<div class="p-3 text-danger">Error loading SVG: ${e.message}</div>`;
+    }
+  }
+
+  function checkMissingRefs(svgElement) {
+    if (!svgElement) return;
+    document.querySelectorAll("#bom-table tr[data-ref]").forEach(row => {
+      const ref = row.dataset.ref;
+      const found = [...svgElement.querySelectorAll('desc')].some(d => d.textContent.trim() === ref);
+      if (!found) {
+        row.classList.add('not-found');
+      }
+    });
+  }
+
+  // SVGロード
+  loadAndInitSvg(schematicContainer, "{{ url_for('static', filename=schematic_svg) }}", true);
+  loadAndInitSvg(pcbContainer, "{{ url_for('static', filename=pcb_svg) }}", false);
+
+  // ✅ 右領域がリサイズされた時にも自動補正
+  window.addEventListener('resize', () => {
+    [schematicContainer, pcbContainer].forEach(container => {
+      const svg = container.svgElement;
+      if (svg && svg.panZoomInstance) {
+        svg.panZoomInstance.resize();
+        svg.panZoomInstance.fit();
+        svg.panZoomInstance.center();
+      }
     });
   });
+
+  // タブ切替時にも補正
+  document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
+    tab.addEventListener('shown.bs.tab', function (event) {
+      const paneId = event.target.getAttribute('data-bs-target');
+      const container = document.querySelector(paneId + '-container');
+      const svgElement = container.svgElement;
+      if (svgElement) {
+        if (!container.panZoomInitialized) {
+          initPanZoom(container, svgElement);
+        }
+        if (svgElement.panZoomInstance) {
+          svgElement.panZoomInstance.resize();
+          svgElement.panZoomInstance.center();
+          svgElement.panZoomInstance.fit();
+        }
+      }
+    });
+  });
+});
 </script>
 </body>
 </html>
